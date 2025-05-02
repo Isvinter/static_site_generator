@@ -1,7 +1,9 @@
 from enum import Enum
-from html_node import HtmlNode, LeafNode
+from html_node import HtmlNode, LeafNode, ParentNode
 import re
-
+import os
+import shutil
+import re
 
 class TextType(Enum):
     NORMAL_TEXT = "Normal text"
@@ -10,6 +12,14 @@ class TextType(Enum):
     CODE_TEXT = "`Code text`"
     URL = "[anchor text](url)"
     IMAGES = "![alt text](url)"
+    
+class BlockType(Enum):
+    PARAGRAPH = "Paragraph"
+    HEADING = "Heading"
+    CODE = "Code"
+    QUOTE = "Quote"
+    UNORDERED_LIST = "Unordered list"
+    ORDERED_LIST = "Ordered list"
     
 class TextNode:
     def __init__(self, text: str, text_type: TextType, url: str = None):
@@ -72,9 +82,10 @@ def split_nodes_delimiter(old_nodes, delimiter, text_type):
 
 def extract_markdown_images(text):
     """
-    Extracts image URLs from the given text using a regex pattern.
+    Extracts image URLs and alt text from markdown.
+    Returns a list of tuples: [(alt_text, url), ...]
     """
-    pattern = r'!\[(.*?\)]\((.*?)\)'
+    pattern = r'!\[(.*?)\]\((.*?)\)'  
     return re.findall(pattern, text)
 
 def extract_markdown_links(text):
@@ -117,6 +128,7 @@ def text_to_textnodes(text):
     Converts a markdown-flavoured text into a list of TextNode objects.
     Uses predefined extraction functions for links and images.
     """
+    
     # Split the text into parts based on the delimiters
     parts = re.split(r'(\*\*.*?\*\*|_.*?_|`.*?`|\[.*?\]\(.*?\)|!\[.*?\]\(.*?\))', text)
     
@@ -146,6 +158,202 @@ def text_to_textnodes(text):
     
     return nodes
 
+def markdown_to_blocks(markdown):
+    """
+    Converts a markdown string into a list of TextNode objects.
+    """
+    # Split the markdown into lines
+    lines = markdown.split("\n\n")
+    
+    blocks = []
+    for line in lines:
+        if line.strip():  # Skip empty lines
+            blocks.append(text_to_textnodes(line))
+    
+    return blocks
+
+def block_to_blocktype(block: str):
+    """
+    Converts a block of text into a BlockType.
+    """
+    if block.startswith("# "):
+        return BlockType.HEADING
+    elif block.startswith("## "):
+        return BlockType.HEADING
+    elif block.startswith("### "):
+        return BlockType.HEADING
+    elif block.startswith("#### "):
+        return BlockType.HEADING
+    elif block.startswith("##### "):
+        return BlockType.HEADING
+    elif block.startswith("###### "):
+        return BlockType.HEADING
+    elif block.startswith("```") and block.endswith("```"):
+        return BlockType.CODE
+    elif block.startswith("- "):
+        return BlockType.UNORDERED_LIST
+    elif block.startswith("1. "):
+        return BlockType.ORDERED_LIST
+    elif block.startswith("> "):
+        return BlockType.QUOTE
+    else:
+        return BlockType.PARAGRAPH
+
+def generate_children_from_textnodes(text_nodes):
+    """
+    Generates a list of HTMLNode objects from a list of TextNode objects.
+    """
+    children = []
+    for node in text_nodes:
+        if isinstance(node, TextNode):
+            children.append(text_node_to_html_node(node))
+        elif isinstance(node, HtmlNode):
+            children.append(node)
+        else:
+            raise TypeError(f"Invalid node type: {type(node)}")
+    return children
+
+def markdown_to_html_node(markdown: str) -> ParentNode:
+    # 1) Roh‑Blocks anhand doppelter Leerzeilen trennen
+    raw_blocks = markdown.split("\n\n")
+    html_nodes = []
+
+    for raw in raw_blocks:
+        if not raw.strip():
+            continue
+
+        # 2) Erstelle die Inline‑Nodes **direkt** aus dem ganzen raw‑Text
+        block_type = block_to_blocktype(raw)
+
+        if block_type == BlockType.UNORDERED_LIST:
+            # raw ist der gesamte Listen-Block, z.B.
+            # "- You can …\n- It can …\n- Disney …\n- It created …"
+            lines = raw.split("\n")
+            list_items = []
+            for line in lines:
+                # entferne das "- " vorne
+                text = re.sub(r'^-\s*', '', line)
+                # parsen wir jede Zeile einzeln auf Inline‑Markdown
+                inline_nodes = text_to_textnodes(text)
+                children    = generate_children_from_textnodes(inline_nodes)
+                list_items.append(ParentNode(tag="li", children=children))
+            html_nodes.append(ParentNode(tag="ul", children=list_items))
 
 
+        elif block_type == BlockType.ORDERED_LIST:
+            # raw ist hier der gesamte Block-String, z.B.
+            # "1. Gandalf\n2. Bilbo\n3. Sam\n…"
+            lines = raw.split("\n")
+            list_items = []
+            for line in lines:
+                # entferne die Nummern-Markierung "1. ", "2. " etc.
+                text = re.sub(r'^\d+\.\s*', '', line)
+                # parsen wir jede Zeile einzeln auf Inline‑Markdown:
+                inline_nodes = text_to_textnodes(text)
+                children = generate_children_from_textnodes(inline_nodes)
+                list_items.append(ParentNode(tag="li", children=children))
+            html_nodes.append(ParentNode(tag="ol", children=list_items))
+
+
+        elif block_type == BlockType.HEADING:
+            # … wie gehabt, nur mit raw statt block[0].text …
+            level = len(re.match(r'^(#+)', raw).group(1))
+            text  = re.sub(r'^#+\s*', '', raw)
+            inline = text_to_textnodes(text)
+            children = generate_children_from_textnodes(inline)
+            tag = f"h{level}" if 1 <= level <= 6 else "h1"
+            html_nodes.append(ParentNode(tag=tag, children=children))
+
+        elif block_type == BlockType.CODE:
+            # pre‑Block: die erste Zeile inkl. Backticks
+            # hier kannst du raw verwenden oder weiterhin block‑Nodes
+            code_node = LeafNode(value=re.sub(r'```', '', raw), tag="code")
+            html_nodes.append(ParentNode(tag="pre", children=[code_node]))
+
+        elif block_type == BlockType.QUOTE:
+            inline = text_to_textnodes(raw.lstrip("> ").replace("\n> ", "\n"))
+            children = generate_children_from_textnodes(inline)
+            html_nodes.append(ParentNode(tag="blockquote", children=children))
+
+        else:  # Paragraph
+            inline = text_to_textnodes(raw)
+            children = generate_children_from_textnodes(inline)
+            html_nodes.append(ParentNode(tag="p", children=children))
+
+    return ParentNode(tag="div", children=html_nodes)
+
+def extract_title_from_markdown(markdown):
+    """
+    Extracts the title from a markdown document.
+    """
+    lines = markdown.split("\n")
+    for line in lines:
+        if line.startswith("# "):
+            return line[2:].strip()
+    raise Exception("No title found in the markdown document")
+
+def copy_all_content(source_folder: str, destination_folder: str):
+    """copy all content from source_folder to destination_folder"""
+    # Check if the source folder exists
+    if not os.path.exists(destination_folder):
+        os.makedirs(destination_folder)
+    # delete all content in destination folder
+    for item in os.listdir(destination_folder):
+        item_path = os.path.join(destination_folder, item)
+        if os.path.isdir(item_path):
+            shutil.rmtree(item_path)  # Use rmtree instead of rmdir
+        else:
+            os.remove(item_path)
+    # copy all content from source folder to destination folder
+    for item in os.listdir(source_folder):
+        source_path = os.path.join(source_folder, item)
+        destination_path = os.path.join(destination_folder, item)
+        if os.path.isdir(source_path):
+            copy_all_content(source_path, destination_path)
+        else:
+            with open(source_path, 'rb') as src_file:
+                print(f"Copying {source_path} to {destination_path}")
+                with open(destination_path, 'wb') as dest_file:
+                    dest_file.write(src_file.read())
+                    
+def generate_page(content_path: str, template_path: str, output_path: str):
+    """
+    Generates an HTML page using markdown content and an HTML template.
+    """
+    print(f"Reading content from {content_path}")
+    print(f"Using template from {template_path}")
+    
+    try:
+        # Read markdown content
+        with open(content_path, 'r', encoding='utf-8') as f:
+            markdown_content = f.read()
+            
+        # Read template
+        with open(template_path, 'r', encoding='utf-8') as f:
+            template = f.read()
+            
+        # Convert markdown to HTML
+        html_node = markdown_to_html_node(markdown_content)
+        html_string = html_node.to_html()
+        
+        # Extract title from markdown
+        title = extract_title_from_markdown(markdown_content)
+
+        # Platzhalter (mit optionalen Leerzeichen) ersetzen
+        final_html = re.sub(r"\{\{\s*Title\s*\}\}", title, template)
+        final_html = re.sub(r"\{\{\s*Content\s*\}\}", html_string, final_html)
+        
+        # Ensure output directory exists
+        os.makedirs(os.path.dirname(output_path), exist_ok=True)
+        
+        # Write final HTML
+        with open(output_path, 'w', encoding='utf-8') as f:
+            f.write(final_html)
+            
+        print(f"Successfully generated {output_path}")
+        
+    except FileNotFoundError as e:
+        print(f"Error: Could not find file - {e}")
+    except Exception as e:
+        print(f"Error generating page: {e}")    
 

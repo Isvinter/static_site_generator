@@ -15,7 +15,7 @@ class HtmlNode:
             and self.props == other.props
         )
     
-    def to_htpml(self):
+    def to_html(self):
         raise NotImplementedError("Subclasses should implement this method")
     
     def props_to_html(self):
@@ -49,3 +49,4 @@ class ParentNode(HtmlNode):
             raise ValueError("ParentNode must have children")
         children_html = "".join([child.to_html() for child in self.children])
         return f"<{self.tag}{self.props_to_html()}>{children_html}</{self.tag}>"
+    
