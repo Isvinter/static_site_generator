@@ -319,61 +319,59 @@ def copy_all_content(source_folder: str, destination_folder: str):
 def generate_page(content_path: str, template_path: str, output_path: str, basepath: str = ""):
     """
     Generates an HTML page using markdown content and an HTML template.
-    Replaces {{ Title }}, {{ Content }} placeholders and adjusts paths with basepath.
+    Replaces {{ Title }}, {{ Content }} placeholders and rewrites absolute href/src
+    so they work unter GitHub Pages.
     """
     try:
-        # Read markdown content and template
+        # --- Einlesen ---
         with open(content_path, 'r', encoding='utf-8') as f:
             markdown_content = f.read()
         with open(template_path, 'r', encoding='utf-8') as f:
             template = f.read()
-            
-        # Extract title and convert markdown to HTML
+
+        # --- Markdown→HTML ---
         try:
             title = extract_title_from_markdown(markdown_content)
         except:
             title = "My Static Site"
-            
-        html_node = markdown_to_html_node(markdown_content)
+        html_node   = markdown_to_html_node(markdown_content)
         html_string = html_node.to_html()
-        
-        # Replace template variables and handle basepath
-        final_html = re.sub(r"\{\{\s*Title\s*\}\}", title, template)
-        final_html = re.sub(r"\{\{\s*Content\s*\}\}", html_string, final_html)
-        
-        # Add basepath to href and src attributes if provided
+
+        # --- Platzhalter ersetzen ---
+        final_html  = re.sub(r"\{\{\s*Title\s*\}\}", title, template)
+        final_html  = re.sub(r"\{\{\s*Content\s*\}\}", html_string, final_html)
+
+        # --- href/src umschreiben ---
         if basepath:
             final_html = re.sub(
-                r'(href|src)="/', 
-                fr'\1="{basepath}/', 
+                r'(href|src)=["\']\/', 
+                rf'\1="{basepath}/', 
                 final_html
             )
-        
-        # Ensure output directory exists and write file
+
+        # --- Datei schreiben ---
         os.makedirs(os.path.dirname(output_path), exist_ok=True)
         with open(output_path, 'w', encoding='utf-8') as f:
             f.write(final_html)
-            
+
         print(f"Successfully generated {output_path}")
-            
+
     except Exception as e:
         print(f"Error generating page: {e}")
+
         
         
-def generate_pages_recursive(content_dir, template_path, dest_dir, repo_base=""):
-    """
-    Recursively generates HTML pages from markdown files in the content directory.
-    Uses the provided template and destination directory.
-    """
+def generate_pages_recursive(content_dir: str, template_path: str, dest_dir: str, basepath: str):
     
+    if not os.path.exists(content_dir):
+        raise ValueError(f"Content directory does not exist: {content_dir}")
+
     for root, _, files in os.walk(content_dir):
         for file in files:
-            if not file.endswith(".md"):
+            if not file.endswith('.md'):
                 continue
-            full_md = os.path.join(root, file)
-            rel = os.path.relpath(full_md, content_dir)
-            out_html = os.path.join(dest_dir, os.path.splitext(rel)[0] + ".html")
+            full_md     = os.path.join(root, file)
+            rel_path    = os.path.relpath(full_md, content_dir)
+            out_html    = os.path.join(dest_dir, os.path.splitext(rel_path)[0] + ".html")
 
-            generate_page(full_md, template_path, out_html, basepath=repo_base)
-
-
+            generate_page(full_md, template_path, out_html, basepath)
