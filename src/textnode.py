@@ -356,4 +356,25 @@ def generate_page(content_path: str, template_path: str, output_path: str):
         print(f"Error: Could not find file - {e}")
     except Exception as e:
         print(f"Error generating page: {e}")    
+        
+def generate_pages_recursive(dir_path_content, template_path, dest_dir_path, root_path_content=None):
+    if root_path_content is None:
+        root_path_content = dir_path_content  
+
+    entries = os.listdir(dir_path_content)
+
+    for entry in entries:
+        full_path = os.path.join(dir_path_content, entry)
+        
+        if os.path.isdir(full_path):
+            print(f"📂 Ordner: {full_path}")
+            generate_pages_recursive(full_path, template_path, dest_dir_path, root_path_content)
+        elif entry.endswith(".md"):
+            print(f"📄 Datei: {full_path}")
+            # Pfad relativ zum Wurzelverzeichnis berechnen
+            relative_path = os.path.relpath(full_path, root_path_content)
+            output_path = os.path.join(dest_dir_path, os.path.splitext(relative_path)[0] + ".html")
+            os.makedirs(os.path.dirname(output_path), exist_ok=True)
+            generate_page(full_path, template_path, output_path)
+
 
