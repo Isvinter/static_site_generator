@@ -343,8 +343,11 @@ def generate_page(content_path: str, template_path: str, output_path: str, basep
         
         # Add basepath to href and src attributes if provided
         if basepath:
-            base_tag = f'<base href="{basepath}/">'
-            final_html = re.sub(r'(<head[^>]*>)', rf'\1\n    {base_tag}', final_html, count=1)
+            final_html = re.sub(
+                r'(href|src)="/', 
+                fr'\1="{basepath}/', 
+                final_html
+            )
         
         # Ensure output directory exists and write file
         os.makedirs(os.path.dirname(output_path), exist_ok=True)
