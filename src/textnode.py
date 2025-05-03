@@ -318,10 +318,9 @@ def copy_all_content(source_folder: str, destination_folder: str):
                     
 def generate_page(content_path: str, template_path: str, output_path: str, basepath: str = ""):
     """
-    Generates an HTML page using markdown content and an HTML template.
-    Replaces {{ Title }}, {{ Content }} placeholders and rewrites absolute href/src
-    so they work unter GitHub Pages.
+    Generates an HTML page and rewrites all local href/src so sie unter GitHub Pages funktionieren.
     """
+    print(f"   ↪️ generate_page called with basepath = '{basepath}' for {output_path}")
     try:
         # --- Einlesen ---
         with open(content_path, 'r', encoding='utf-8') as f:
@@ -340,14 +339,11 @@ def generate_page(content_path: str, template_path: str, output_path: str, basep
         # --- Platzhalter ersetzen ---
         final_html  = re.sub(r"\{\{\s*Title\s*\}\}", title, template)
         final_html  = re.sub(r"\{\{\s*Content\s*\}\}", html_string, final_html)
-
-        # --- href/src umschreiben ---
+        
         if basepath:
-            final_html = re.sub(
-                r'(href|src)=["\']\/', 
-                rf'\1="{basepath}/', 
-                final_html
-            )
+            pattern     = r'(href|src)=["\'](?!https?://|//)([^"\']+)["\']'
+            replacement = rf'\1="{basepath}/\2"'
+            final_html  = re.sub(pattern, replacement, final_html)
 
         # --- Datei schreiben ---
         os.makedirs(os.path.dirname(output_path), exist_ok=True)
