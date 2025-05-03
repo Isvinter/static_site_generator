@@ -316,65 +316,71 @@ def copy_all_content(source_folder: str, destination_folder: str):
                 with open(destination_path, 'wb') as dest_file:
                     dest_file.write(src_file.read())
                     
-def generate_page(content_path: str, template_path: str, output_path: str):
+def generate_page(content_path: str, template_path: str, output_path: str, basepath: str = ""):
     """
     Generates an HTML page using markdown content and an HTML template.
+    Replaces {{ Title }}, {{ Content }} placeholders and adjusts paths with basepath.
     """
-    print(f"Reading content from {content_path}")
-    print(f"Using template from {template_path}")
-    
     try:
-        # Read markdown content
+        # Read markdown content and template
         with open(content_path, 'r', encoding='utf-8') as f:
             markdown_content = f.read()
-            
-        # Read template
         with open(template_path, 'r', encoding='utf-8') as f:
             template = f.read()
             
-        # Convert markdown to HTML
+        # Extract title and convert markdown to HTML
+        try:
+            title = extract_title_from_markdown(markdown_content)
+        except:
+            title = "My Static Site"
+            
         html_node = markdown_to_html_node(markdown_content)
         html_string = html_node.to_html()
         
-        # Extract title from markdown
-        title = extract_title_from_markdown(markdown_content)
-
-        # Platzhalter (mit optionalen Leerzeichen) ersetzen
+        # Replace template variables and handle basepath
         final_html = re.sub(r"\{\{\s*Title\s*\}\}", title, template)
         final_html = re.sub(r"\{\{\s*Content\s*\}\}", html_string, final_html)
         
-        # Ensure output directory exists
-        os.makedirs(os.path.dirname(output_path), exist_ok=True)
+        # Add basepath to href and src attributes if provided
+        if basepath:
+            final_html = re.sub(r'(href|src)="/', fr'\1="{basepath}/', final_html)
         
-        # Write final HTML
+        # Ensure output directory exists and write file
+        os.makedirs(os.path.dirname(output_path), exist_ok=True)
         with open(output_path, 'w', encoding='utf-8') as f:
             f.write(final_html)
             
         print(f"Successfully generated {output_path}")
-        
-    except FileNotFoundError as e:
-        print(f"Error: Could not find file - {e}")
+            
     except Exception as e:
-        print(f"Error generating page: {e}")    
-        
-def generate_pages_recursive(dir_path_content, template_path, dest_dir_path, root_path_content=None):
-    if root_path_content is None:
-        root_path_content = dir_path_content  
+        print(f"Error generating page: {e}")
 
-    entries = os.listdir(dir_path_content)
-
-    for entry in entries:
-        full_path = os.path.join(dir_path_content, entry)
+def generate_pages_recursive(dir_path_content: str, dir_path_template: str, dest_dir_path: str):
+    """
+    Recursively generates HTML pages from markdown files in a directory structure.
+    Maintains the directory structure in the output and handles relative paths.
+    """
+    if not os.path.exists(dir_path_content):
+        raise ValueError(f"Content directory does not exist: {dir_path_content}")
         
-        if os.path.isdir(full_path):
-            print(f"📂 Ordner: {full_path}")
-            generate_pages_recursive(full_path, template_path, dest_dir_path, root_path_content)
-        elif entry.endswith(".md"):
-            print(f"📄 Datei: {full_path}")
-            # Pfad relativ zum Wurzelverzeichnis berechnen
-            relative_path = os.path.relpath(full_path, root_path_content)
+    for root, _, files in os.walk(dir_path_content):
+        for file in files:
+            if not file.endswith('.md'):
+                continue
+                
+            # Get full paths
+            full_path = os.path.join(root, file)
+            print(f"📄 Processing: {full_path}")
+            
+            # Generate the output path
+            relative_path = os.path.relpath(full_path, dir_path_content)
             output_path = os.path.join(dest_dir_path, os.path.splitext(relative_path)[0] + ".html")
-            os.makedirs(os.path.dirname(output_path), exist_ok=True)
-            generate_page(full_path, template_path, output_path)
+            
+            # Calculate basepath based on the depth of the file
+            depth = len(os.path.relpath(output_path, dest_dir_path).split(os.sep)) - 1
+            basepath = "../" * depth if depth > 0 else ""
+            
+            # Generate the page with the calculated basepath
+            generate_page(full_path, dir_path_template, output_path, basepath)
 
 
