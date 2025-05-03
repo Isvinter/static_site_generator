@@ -59,17 +59,23 @@ def split_nodes_delimiter(old_nodes, delimiter, text_type):
         
     result = []
     for node in old_nodes:
+        # Check if node is a valid type
         if not isinstance(node, (TextNode, HtmlNode)):
             raise TypeError(f"Invalid node type: {type(node)}")
+            
+        # If it's an HtmlNode, add it as-is
         if isinstance(node, HtmlNode):
             result.append(node)
             continue
+            
+        # Check if TextNode has valid text_type
         if not isinstance(node.text_type, TextType):
             raise ValueError(f"Invalid text type: {node.text_type}")
             
+        # Split TextNode content and create new nodes
         words = node.text.split(delimiter)
         for word in words:
-            if word: 
+            if word:  # Only create nodes for non-empty strings
                 result.append(TextNode(word, text_type))
                 
     return result
@@ -123,11 +129,12 @@ def text_to_textnodes(text):
     Uses predefined extraction functions for links and images.
     """
     
+    # Split the text into parts based on the delimiters
     parts = re.split(r'(\*\*.*?\*\*|_.*?_|`.*?`|\[.*?\]\(.*?\)|!\[.*?\]\(.*?\))', text)
     
     nodes = []
     for part in parts:
-        if not part:  
+        if not part:  # Skip empty parts
             continue
             
         if part.startswith("**") and part.endswith("**"):
@@ -155,11 +162,12 @@ def markdown_to_blocks(markdown):
     """
     Converts a markdown string into a list of TextNode objects.
     """
+    # Split the markdown into lines
     lines = markdown.split("\n\n")
     
     blocks = []
     for line in lines:
-        if line.strip(): 
+        if line.strip():  # Skip empty lines
             blocks.append(text_to_textnodes(line))
     
     return blocks
@@ -206,7 +214,7 @@ def generate_children_from_textnodes(text_nodes):
     return children
 
 def markdown_to_html_node(markdown: str) -> ParentNode:
-    
+    # 1) Roh‑Blocks anhand doppelter Leerzeilen trennen
     raw_blocks = markdown.split("\n\n")
     html_nodes = []
 
@@ -214,13 +222,18 @@ def markdown_to_html_node(markdown: str) -> ParentNode:
         if not raw.strip():
             continue
 
+        # 2) Erstelle die Inline‑Nodes **direkt** aus dem ganzen raw‑Text
         block_type = block_to_blocktype(raw)
 
         if block_type == BlockType.UNORDERED_LIST:
+            # raw ist der gesamte Listen-Block, z.B.
+            # "- You can …\n- It can …\n- Disney …\n- It created …"
             lines = raw.split("\n")
             list_items = []
             for line in lines:
+                # entferne das "- " vorne
                 text = re.sub(r'^-\s*', '', line)
+                # parsen wir jede Zeile einzeln auf Inline‑Markdown
                 inline_nodes = text_to_textnodes(text)
                 children    = generate_children_from_textnodes(inline_nodes)
                 list_items.append(ParentNode(tag="li", children=children))
@@ -228,10 +241,14 @@ def markdown_to_html_node(markdown: str) -> ParentNode:
 
 
         elif block_type == BlockType.ORDERED_LIST:
+            # raw ist hier der gesamte Block-String, z.B.
+            # "1. Gandalf\n2. Bilbo\n3. Sam\n…"
             lines = raw.split("\n")
             list_items = []
             for line in lines:
+                # entferne die Nummern-Markierung "1. ", "2. " etc.
                 text = re.sub(r'^\d+\.\s*', '', line)
+                # parsen wir jede Zeile einzeln auf Inline‑Markdown:
                 inline_nodes = text_to_textnodes(text)
                 children = generate_children_from_textnodes(inline_nodes)
                 list_items.append(ParentNode(tag="li", children=children))
@@ -239,6 +256,7 @@ def markdown_to_html_node(markdown: str) -> ParentNode:
 
 
         elif block_type == BlockType.HEADING:
+            # … wie gehabt, nur mit raw statt block[0].text …
             level = len(re.match(r'^(#+)', raw).group(1))
             text  = re.sub(r'^#+\s*', '', raw)
             inline = text_to_textnodes(text)
@@ -247,6 +265,8 @@ def markdown_to_html_node(markdown: str) -> ParentNode:
             html_nodes.append(ParentNode(tag=tag, children=children))
 
         elif block_type == BlockType.CODE:
+            # pre‑Block: die erste Zeile inkl. Backticks
+            # hier kannst du raw verwenden oder weiterhin block‑Nodes
             code_node = LeafNode(value=re.sub(r'```', '', raw), tag="code")
             html_nodes.append(ParentNode(tag="pre", children=[code_node]))
 
@@ -255,7 +275,7 @@ def markdown_to_html_node(markdown: str) -> ParentNode:
             children = generate_children_from_textnodes(inline)
             html_nodes.append(ParentNode(tag="blockquote", children=children))
 
-        else:  
+        else:  # Paragraph
             inline = text_to_textnodes(raw)
             children = generate_children_from_textnodes(inline)
             html_nodes.append(ParentNode(tag="p", children=children))
@@ -303,11 +323,13 @@ def generate_page(content_path: str, template_path: str, output_path: str, basep
     so they work unter GitHub Pages.
     """
     try:
+        # --- Einlesen ---
         with open(content_path, 'r', encoding='utf-8') as f:
             markdown_content = f.read()
         with open(template_path, 'r', encoding='utf-8') as f:
             template = f.read()
 
+        # --- Markdown→HTML ---
         try:
             title = extract_title_from_markdown(markdown_content)
         except:
@@ -315,10 +337,11 @@ def generate_page(content_path: str, template_path: str, output_path: str, basep
         html_node   = markdown_to_html_node(markdown_content)
         html_string = html_node.to_html()
 
-  
+        # --- Platzhalter ersetzen ---
         final_html  = re.sub(r"\{\{\s*Title\s*\}\}", title, template)
         final_html  = re.sub(r"\{\{\s*Content\s*\}\}", html_string, final_html)
 
+        # --- href/src umschreiben ---
         if basepath:
             final_html = re.sub(
                 r'(href|src)=["\']\/', 
@@ -326,6 +349,7 @@ def generate_page(content_path: str, template_path: str, output_path: str, basep
                 final_html
             )
 
+        # --- Datei schreiben ---
         os.makedirs(os.path.dirname(output_path), exist_ok=True)
         with open(output_path, 'w', encoding='utf-8') as f:
             f.write(final_html)
@@ -338,7 +362,6 @@ def generate_page(content_path: str, template_path: str, output_path: str, basep
         
         
 def generate_pages_recursive(content_dir: str, template_path: str, dest_dir: str, basepath: str):
-    
     if not os.path.exists(content_dir):
         raise ValueError(f"Content directory does not exist: {content_dir}")
 
