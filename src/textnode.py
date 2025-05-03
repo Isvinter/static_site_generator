@@ -341,7 +341,8 @@ def generate_page(content_path: str, template_path: str, output_path: str, basep
         final_html  = re.sub(r"\{\{\s*Content\s*\}\}", html_string, final_html)
         
         if basepath:
-            pattern     = r'(href|src)=["\'](?!https?://|//)([^"\']+)["\']'
+            # wir fangen optional einen führenden Slash ab, nehmen ihn aber NICHT in die Gruppe auf
+            pattern = r'(href|src)=["\'](?!https?://|//)(/?[^"\']+)["\']'
             replacement = rf'\1="{basepath}/\2"'
             final_html  = re.sub(pattern, replacement, final_html)
 
