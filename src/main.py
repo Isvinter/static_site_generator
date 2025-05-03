@@ -15,10 +15,9 @@ def main():
     # Copy all content from source folder to destination folder
     copy_all_content(source_folder, destination_folder)
     
-    # Generate a single page
-    generate_page(base_path, template_path, destination_folder)
-    # Generate pages recursively
-    generate_pages_recursive(base_path, template_path, destination_folder)
+    # Generate a pages recursively
+    generate_pages_recursive(content_path, template_path, destination_folder)
+
     
 if __name__ == "__main__":
     main()
