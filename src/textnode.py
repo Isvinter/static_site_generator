@@ -358,33 +358,22 @@ def generate_page(content_path: str, template_path: str, output_path: str, basep
             
     except Exception as e:
         print(f"Error generating page: {e}")
-
-def generate_pages_recursive(dir_path_content: str, dir_path_template: str, dest_dir_path: str):
-    """
-    Recursively generates HTML pages from markdown files in a directory structure.
-    Maintains the directory structure in the output and handles relative paths.
-    """
-    if not os.path.exists(dir_path_content):
-        raise ValueError(f"Content directory does not exist: {dir_path_content}")
         
-    for root, _, files in os.walk(dir_path_content):
+        
+def generate_pages_recursive(content_dir, template_path, dest_dir, repo_base=""):
+    """
+    Recursively generates HTML pages from markdown files in the content directory.
+    Uses the provided template and destination directory.
+    """
+    
+    for root, _, files in os.walk(content_dir):
         for file in files:
-            if not file.endswith('.md'):
+            if not file.endswith(".md"):
                 continue
-                
-            # Get full paths
-            full_path = os.path.join(root, file)
-            print(f"📄 Processing: {full_path}")
-            
-            # Generate the output path
-            relative_path = os.path.relpath(full_path, dir_path_content)
-            output_path = os.path.join(dest_dir_path, os.path.splitext(relative_path)[0] + ".html")
-            
-            # Calculate basepath based on the depth of the file
-            depth = len(os.path.relpath(output_path, dest_dir_path).split(os.sep)) - 1
-            basepath = "../" * depth if depth > 0 else ""
-            
-            # Generate the page with the calculated basepath
-            generate_page(full_path, dir_path_template, output_path, basepath)
+            full_md = os.path.join(root, file)
+            rel = os.path.relpath(full_md, content_dir)
+            out_html = os.path.join(dest_dir, os.path.splitext(rel)[0] + ".html")
+
+            generate_page(full_md, template_path, out_html, basepath=repo_base)
 
 

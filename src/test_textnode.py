@@ -547,6 +547,8 @@ def test_extract_title_from_markdown_no_paragraph(self):
 """
     title = extract_title_from_markdown(md)
     self.assertEqual(title, "This is a title")
+    
+
 
 
 if __name__ == "__main__":
